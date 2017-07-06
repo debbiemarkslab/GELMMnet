@@ -1,10 +1,14 @@
 
 # GELMMnet - Generalized network-based elastic-net linear mixed model
 
-Author:		Benjamin Schubert 
-Year:		2015 
-Group:		Debora Marks Group 
-Institutes:	Systems Biology, Harvard Medical School, 200 Longwood Avenue, Boston, 02115 MA, USA 
+Author:		  Benjamin Schubert
+Year:		    2015  
+
+
+Institutes:	Systems and Cell Biology, Harvard Medical School, 200 Longwood Avenue, Boston, 02115 MA, USA 
+
+Group:		  Debora Marks and Chris Sander Group 
+
 
 Implementation of a generalized elastic net LMM for (mainly) GWAS analysis.
 

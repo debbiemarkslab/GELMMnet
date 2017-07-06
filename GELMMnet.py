@@ -384,5 +384,25 @@ class GELMMnet(object):
                                                                              y - sp.dot(X[:, idx], w[idx]) + b))
         return y_v
 
+    def post_selection_analysis(self, alternative='twosided', alpha=0.05, UMAU=False, compute_intervals=False):
+        """
+        implements the post selection analysis proposed by
+
+        Lee, J. D., Sun, D. L., Sun, Y., & Taylor, J. E. (2016).
+        Exact post-selection inference, with application to the lasso.
+        The Annals of Statistics, 44(3), 907-927.
+
+
+        See: https://github.com/selective-inference/Python-software
+
+        :param str alternative: The type of test statistic to calculate ['twosoded', 'onesided']
+        :param float alpha: The (1-alpha)*100% selective confidence intervals
+        :param bool UMAU: Whethter UMAU intervals should be calculated
+        :return: DataFrame with one entry per active variable. Columns are
+                 'variable', 'pval', 'lasso', 'onestep', 'lower_trunc', 'upper_trunc', 'sd'.
+
+        """
+
+
 
 

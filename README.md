@@ -3,10 +3,7 @@
 
 Author:		  Benjamin Schubert
 Year:		    2015  
-
-
 Institutes:	Systems and Cell Biology, Harvard Medical School, 200 Longwood Avenue, Boston, 02115 MA, USA 
-
 Group:		  Debora Marks and Chris Sander Group 
 
 

@@ -7,6 +7,7 @@ Institutes:	Systems and Cell Biology, Harvard Medical School, 200 Longwood Avenu
 Group:		  Debora Marks and Chris Sander Group 
 
 
+
 Implementation of a generalized elastic net LMM for (mainly) GWAS analysis.
 
 The implementation is based on Barbara Rakitsch's implementation of LMM-Lasso (https://github.com/BorgwardtLab/LMM-Lasso)

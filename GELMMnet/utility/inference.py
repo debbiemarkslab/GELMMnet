@@ -27,7 +27,7 @@ def _eval_neg_log_likelihood(ldelta, Uy, S):
     Uy = Uy.flatten()
     ss = 1. / n_s * (Uy * Uy * Sdi).sum()
     # evaluate the negative log likelihood
-    nLL = 0.5 * (n_s * np.log(2.0 * sp.pi) + ldet + n_s + n_s * np.log(ss))
+    nLL = 0.5 * (n_s * np.log(2.0 * np.pi) + ldet + n_s + n_s * np.log(ss))
 
     return nLL
 

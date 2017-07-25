@@ -35,7 +35,7 @@ import scipy as sp
 from sklearn.model_selection import KFold
 from sklearn.preprocessing import scale
 
-from GELMMnet.utility.inference import max_l1, _eval_neg_log_likelihood, _optimize_gelnet, _predict
+from GELMMnet.utility.inference import max_l1, _eval_neg_log_likelihood, _optimize_gelnet, _predict, _parameter_search
 from GELMMnet.utility.postselection import _calc_interval, _calc_pval
 
 
@@ -223,17 +223,8 @@ class GELMMnet(object):
 
     def kfoldFit(self, P, nfold=10, alpha_nof=100, ratio_nof=100, eps=1e-5, max_iter=10000, cpu=1, debug=False):
         """
-        optimizes l1 and l2 based on k-fold cv with grid search minimizing the RMSE
+        optimizes l1 and l2 based on k-fold cv with grid search minimizing the MSE
 
-        :param P:
-        :param nfold:
-        :param alpha_nof:
-        :param ratio_nof:
-        :param eps:
-        :param max_iter:
-        :param cpu:
-        :param debug:
-        :return:
         """
 
         def generate_grid():
@@ -263,9 +254,9 @@ class GELMMnet(object):
         ratios = np.linspace(0.0, 1., num=ratio_nof) # that should actually be skewed towards 1.
         alphas = np.linspace(0.0, alpha_ceil, num=alpha_nof, endpoint=False)
 
-        grid_result = pool.map(_param_search, generate_grid())
+        grid_result = pool.map(_parameter_search, generate_grid())
 
-        #summarize grid search results
+        # summarize grid search results
         sum_res = {}
         for fold, error, l1, l2 in grid_result:
             sum_res.setdefault((l1, l2), []).append(error)
@@ -274,7 +265,6 @@ class GELMMnet(object):
         (l1, l2), error = min(sum_res.items(), key=lambda x: np.mean(x[1]))
         if debug:
             print("Best Parameters:", l1, l2, "With error:", np.mean(error))
-
 
         # fitting on whole date with best parameter pair
         S = sp.dot(X, w) + b
@@ -329,7 +319,8 @@ class GELMMnet(object):
         :param float alpha: The (1-alpha)*100% selective confidence intervals
         :param bool UMAU: Whethter UMAU intervals should be calculated
         :return: DataFrame with one entry per active variable. Columns are
-                 'variable', 'pval', 'lasso', 'onestep', 'lower_trunc', 'upper_trunc', 'sd'.
+
+        'variable', 'pval', 'lasso', 'beta','Zscore', 'lower_ci', 'upper_ci', 'lower_trunc', 'upper_trunc', 'sd'.
 
         """
         if self.__SUX is None and self.__islmm:

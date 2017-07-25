@@ -13,7 +13,7 @@ setup(
     name='GELMMnet',
 
     # Version:
-    version='0.0.1',
+    version='0.0.2',
 
     description='Generalized elastic-net linear mixed model',
     long_description=readme,
@@ -56,10 +56,10 @@ setup(
 
 
     install_requires=[
-        'setuptools>=18.2', 'pandas', 'numpy', 'scipy', 'numba', 'scipy','cython>=0.11.1','sklearn>=0.14.1',
-        'mpmath>=0.18','pyinter>=0.1.6'
+        'setuptools>=18.2', 'pandas', 'numpy', 'scipy', 'numba', 'sklearn>=0.14.1',
+
     ],
 
-    dependency_links=['https://github.com/regreg/regreg']
+    dependency_links=["https://github.com/uqfoundation/pathos/tarball/master"]
 
 )

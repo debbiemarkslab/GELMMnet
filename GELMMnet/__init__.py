@@ -1,2 +1,2 @@
-from GELMMnet.GELMMnet import *
+from GELMMnet.utility import *
 from GELMMnet.LMMlasso import *

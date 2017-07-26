@@ -40,10 +40,10 @@ def normalized_laplacian(A):
     n, m = A.shape
     assert n == m, ValueError("Dimensions to not match")
 
-    A[sp.diag_indices(n)] = 0.0
+    A[np.diag_indices(n)] = 0.0
 
-    d = sp.sqrt(1.0 / sp.sum(A, axis=1))
-    d[sp.isinf(d)] = 0.0
+    d = np.sqrt(1.0 / np.sum(A, axis=1))
+    d[np.isinf(d)] = 0.0
 
     L = laplacian(A)
 

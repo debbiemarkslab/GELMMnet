@@ -3,7 +3,7 @@
 
 Implementation of a generalized elastic net LMM for (mainly) GWAS analysis. 
 It also implements the exact post selection inference method proposed by Lee et al. to generate
-accurate confidence interval and p-values.
+accurate confidence interval and p-values adjusted for elastic net.
 
 
 The implementation is based on Barbara Rakitsch's implementation of LMM-Lasso (https://github.com/BorgwardtLab/LMM-Lasso)
@@ -26,19 +26,19 @@ Harvard Medical School,
 
 **References:**
 
-Rakitsch, B., Lippert, C., Stegle, O., & Borgwardt, K. (2012). 
+1) Rakitsch, B., Lippert, C., Stegle, O., & Borgwardt, K. (2012). 
 A Lasso multi-marker mixed model for association mapping with 
 population structure correction. Bioinformatics, 29(2), 206-214.
 
-Sokolov, A., Carlin, D. E., Paull, E. O., Baertsch, R., & Stuart, J. M. (2016). 
+2) Sokolov, A., Carlin, D. E., Paull, E. O., Baertsch, R., & Stuart, J. M. (2016). 
 Pathway-based genomics prediction using generalized elastic net. 
 PLoS Computational Biology, 12(3), e1004790.
 
-Lee, J. D., Sun, D. L., Sun, Y., & Taylor, J. E. (2016). 
+3) Lee, J. D., Sun, D. L., Sun, Y., & Taylor, J. E. (2016). 
 Exact post-selection inference, with application to the lasso. 
 The Annals of Statistics, 44(3), 907-927. Chicago	
 
 
-McKerns, M., & Aivazis, M. pathos: a framework for heterogeneous computing, 2010.
+4) McKerns, M., & Aivazis, M. pathos: a framework for heterogeneous computing, 2010.
 Chicago	
 

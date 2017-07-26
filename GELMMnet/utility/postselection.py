@@ -7,12 +7,7 @@ def _calc_pval(y, A, b, v, sigma):
     """
     calculates p-value based on defined polyhedral
 
-    :param y:
-    :param A:
-    :param b:
-    :param v:
-    :param sigma:
-    :return:
+    :return: p-value
     """
     z = np.sum(v*y)
     vv = np.sum(np.power(v, 2))
@@ -29,6 +24,11 @@ def _calc_pval(y, A, b, v, sigma):
 
 
 def _truncatednorm_surv(z, mean, a, b, sd):
+    """
+    Truncated normal survival function
+
+    :return: returns P(Z > z)
+    """
     def ff(z):
         return ((np.power(z, 2) + 5.575192695 * z + 12.7743632) /
                 (np.power(z, 3) * np.sqrt(2 * np.pi) + 14.38718147 * z * z + 31.53531977 * z + 2 * 12.77436324))
@@ -64,6 +64,11 @@ def _truncatednorm_surv(z, mean, a, b, sd):
 
 
 def _calc_interval(y, A, b, v, sigma, alpha, gridrange=[-100, 100], gridpts=100, griddepth=1, flip=False):
+    """
+    Selection corrected CI calculation
+
+    :return: (CI_lower,CI_upper),(tail_lower, tail_upper)
+    """
     z = np.sum(v*y)
     vv = np.sum(np.power(v, 2))
     sd = sigma * np.sqrt(vv)
@@ -85,6 +90,10 @@ def _calc_interval(y, A, b, v, sigma, alpha, gridrange=[-100, 100], gridpts=100,
 
 
 def _grid_search(grid, fun, val1, val2, gridpts=100, griddepth=1):
+    """
+    First grid search for CI calculation
+
+    """
     vals = np.array([fun(x) for x in grid])
 
     ii = np.where(vals >= val1)[0]
@@ -113,6 +122,10 @@ def _grid_search(grid, fun, val1, val2, gridpts=100, griddepth=1):
 
 
 def _grid_bsearch(l, r, fun, val, gridpts=100, griddepth=0, below=True):
+    """
+    Second level grid search for CI calculation
+
+    """
     left = l
     right = r
 

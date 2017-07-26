@@ -21,7 +21,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
 The implementation is based on Barbara Rakitsch's implementation of LMM-Lasso (https://github.com/BorgwardtLab/LMM-Lasso)
-and Artem Skolov's implementation of GELnet (https://github.com/cran/gelnet)
+, Artem Skolov's implementation of GELnet (https://github.com/cran/gelnet), and Ryan Tibshirani et al.'s implementation
+of selectiveInference (https://cran.r-project.org/web/packages/selectiveInference/index.html)
 
 """
 from pathos.pools import ParallelPool as Pool

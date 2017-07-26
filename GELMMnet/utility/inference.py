@@ -5,7 +5,7 @@ from numba import jit
 @jit(nopython=True)
 def _eval_neg_log_likelihood(ldelta, Uy, S):
     """
-    evaluate the negative log likelihood of a random effects model:
+    Evaluate the negative log likelihood of a random effects model:
     nLL = 1/2(n_s*log(2pi) + logdet(K) + 1/ss * y^T(K + deltaI)^{-1}y,
     where K = USU^T.
 
@@ -35,7 +35,7 @@ def _eval_neg_log_likelihood(ldelta, Uy, S):
 @jit(nopython=True)
 def _calc_glnet_obj(S, y, Pw, w, l1, l2, n, m):
     """
-    claculates the gelnet objective
+    Calculates the gelnet objective
 
      1/(2*n)*Sum(y_i - S)^2 + l1*sum(|w|) +l2/2*w^T*P*w
 
@@ -89,6 +89,11 @@ def _update_wj(X, y, P, w, l1, l2, S, Pw, n, m, j):
 
 @jit(nopython=True)
 def _optimize_gelnet(y, X, P, l1, l2, S, Pw, n, m, max_iter, eps, w, b, with_intercept):
+    """
+    Coordinate descent of a generalized elastic net
+
+    :return: weights, intercept
+    """
     obj_old = _calc_glnet_obj(S, y, Pw, w, l1, l2, n, m)
 
     # start optimization
@@ -131,6 +136,13 @@ def _optimize_gelnet(y, X, P, l1, l2, S, Pw, n, m, max_iter, eps, w, b, with_int
 
 @jit(nopython=True)
 def _predict(X, y, X_tilde, w, b, delta):
+    """
+    predicts the phenotype based on the trained model
+
+    following Rasmussen and Williams 2006
+
+    :return: y_tilde the predicted phenotype
+    """
 
     n_test = X_tilde.shape[0]
     n_train = X.shape[0]
@@ -152,6 +164,7 @@ def _predict(X, y, X_tilde, w, b, delta):
                                                                              y[:, 0] - np.dot(X[:, idx],
                                                                                             w[idx]) + b))
 
+
 @jit(nonpython=True)
 def max_l1(y, X):
     """
@@ -166,10 +179,9 @@ def max_l1(y, X):
 @jit(nonpython=True)
 def _mse(y, ypred):
     """
-    Calculates the mean squered error
-    :param y:
-    :param ypred:
-    :return:
+    Calculates the mean squared error
+
+    :return: MSE
     """
     return np.nanmean(np.power((y - ypred), 2))
 
@@ -179,20 +191,6 @@ def _parameter_search(fold, alpha, ratio, w, b, delta, isIntercept, ytrain, Xtra
     """
     Function for grid search evaluation
 
-    :param fold:
-    :param alpha:
-    :param ratio:
-    :param metric:
-    :param w:
-    :param b:
-    :param delta:
-    :param ytrain:
-    :param Xtrain:
-    :param ytest:
-    :param Xtest:
-    :param P:
-    :param eps:
-    :param max_iter:
     :return: error,l1,l2
     """
 

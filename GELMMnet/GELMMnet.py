@@ -25,9 +25,9 @@ The implementation is based on Barbara Rakitsch's implementation of LMM-Lasso (h
 of selectiveInference (https://cran.r-project.org/web/packages/selectiveInference/index.html)
 
 """
-from pathos.pools import ParallelPool as Pool
-
+import multiprocessing as mp
 from collections import OrderedDict
+from itertools import starmap
 
 import numpy as np
 import pandas as pd
@@ -203,7 +203,7 @@ class GELMMnet(object):
         self.b = b
         return b, w
 
-    def kfoldFit(self, P, nfold=5, l1_nof=10, l2_nof=10, eps=1e-8, max_iter=10000, cpu=1, debug=False):
+    def kfoldFit(self, P, nfold=5, l1_nof=10, l2_nof=10, eps=1e-8, max_iter=10000, cpu=1, chunksize=None, debug=False):
         """
         optimizes l1 and l2 based on k-fold cv with grid search minimizing the MSE
 
@@ -220,6 +220,8 @@ class GELMMnet(object):
                                ytrain, ypred, Xtrain, Xpred, ytest, Xtest, P, eps, max_iter, n, m]
 
         self.P = P
+        if chunksize is None:
+            chunksize = cpu
 
         if debug and self.__islmm:
             print("Correcting for population structure")
@@ -227,7 +229,9 @@ class GELMMnet(object):
         if self.SUX is None and self.__islmm:
             self.fit_null_model()
 
-        pool = Pool(nodes=cpu)
+        # TODO: checkout https://mcieslik-mctp.github.io/papy/api.html#numap-numap
+        # lazy pool.map evaluator
+        #pool = mp.Pool(processes=cpu)
         cv = KFold(n_splits=nfold)
 
         Xt = self.SUX if self.__islmm else self.X
@@ -237,13 +241,13 @@ class GELMMnet(object):
         w = self.w
         b = self.b
         delta = np.exp(self.ldelta)
+        S = sp.dot(Xt, w) + b
+        Pw = sp.dot(P, w)
+        n, m = Xt.shape
 
         alpha_ceil = max_l1(y, Xt)
         if debug:
             print("Max l1:", alpha_ceil)
-            S = sp.dot(Xt, w) + b
-            Pw = sp.dot(P, w)
-            n,m = Xt.shape
             w, b = _optimize_gelnet(y, Xt, P, alpha_ceil, 0, S, Pw, n, m, max_iter, eps, w, b, self.__isIntercept)
             print("w != 0:", np.where(np.fabs(w) > 1e-5 / np.sqrt(np.sum(np.power(Xt, 2), axis=0)))[0])
 
@@ -255,16 +259,16 @@ class GELMMnet(object):
             print("L2:", l2s)
             print("L1:", l1s)
 
-        grid_result = map(_parameter_search, generate_grid())
+        grid_result = starmap(_parameter_search, generate_grid())
+
+        #pool.close()
+        #pool.join()
 
         # summarize grid search results
         sum_res = {}
 
         for fold, error, l1, l2 in grid_result:
             sum_res.setdefault((l1, l2), []).append(error)
-
-        for k,v in sum_res.items():
-            print(k, np.mean(v))
 
         # find best l1, l2 pair across the folds
         (l1, l2), error = max(sum_res.items(), key=lambda x: np.mean(x[1]))
@@ -317,7 +321,7 @@ class GELMMnet(object):
         return _predict(X, y, X_tilde, w, b, delta)
 
     def post_selection_analysis(self, alpha=0.1, compute_intervals=False, gridrange=[-100, 100], tol_beta=1e-5,
-                                tol_kkt=0.1):
+                                tol_kkt=0.1, sigma=None):
         """
         implements the post selection analysis proposed by
 
@@ -338,13 +342,18 @@ class GELMMnet(object):
         if self.SUX is None and self.__islmm:
             RuntimeError("The model has not been trained yet")
 
-        X = self.SUX if self.__islmm else self.X
-        y = self.SUy[:, 0] if self.__islmm else self.y[:, 0]
+        X = self.X
+        y = self.y[:, 0]
         w = self.w
         P = self.P
         l2 = self.l2
         l1 = self.l1
-        sigma = self.sigma if self.sigma is not None else np.std(y)
+        _sigma = np.std(y)
+
+        if sigma is not None:
+            _sigma= sigma
+        if self.sigma is not None:
+            _sigma = self.sigma
 
         if self.__isIntercept:
             y = scale(y, with_std=False)
@@ -360,7 +369,7 @@ class GELMMnet(object):
             Warning("Beta does not satisfy the KKT conditions (to within specified tolerances)")
 
         active = np.where(np.fabs(w) > tol_beta / np.sqrt(np.sum(np.power(X, 2), axis=0)))[0]
-        print("Active", active)
+
         active_signs = np.sign(w[active])
 
         if not active.size:
@@ -370,7 +379,7 @@ class GELMMnet(object):
         if np.any(np.sign(g[active]) != active_signs):
             Warning(
                 "Solution beta does not satisfy the KKT conditions (to within specified tolerances). " +
-                "You might try rerunning GELMMnet with a lower setting of the 'thresh' parameter, " +
+                "You might try rerunning GELMMnet with a lower setting of the 'eps' parameter, " +
                 "for a more accurate convergence."
             )
 
@@ -388,7 +397,11 @@ class GELMMnet(object):
         '''
         A = np.dot(D, np.dot(H_AAinv, np.transpose(XM)))
 
-        b = l1 * np.dot(np.dot(D, H_AAinv), active_signs)
+        b = l1 * np.dot(D, np.dot(H_AAinv, active_signs))
+        tol_poly = 0.01
+        if np.min(np.dot(A, y) - b) < -tol_poly * np.sqrt(np.sum(np.power(y, 2))):
+            ValueError("Polyhedral constraints not satisfied; you must recompute beta more accurately.")
+
 
         ################################################################################################################
         # P-value and CI calculations
@@ -406,18 +419,18 @@ class GELMMnet(object):
             vj = sign * vj
 
             #calculate p-value
-            _pval, vlo, vup = _calc_pval(y, A, b, vj, sigma)
+            _pval, vlo, vup = _calc_pval(y, A, b, vj, _sigma)
             vmat = vj * mj * sign
 
             if compute_intervals:
-                _interval, tailarea = _calc_interval(y, A, b, vj, sigma, alpha,
+                _interval, tailarea = _calc_interval(y, A, b, vj, _sigma, alpha,
                                                      gridrange=gridrange, flip=sign == -1)
 
                 ci = [x*mj for x in _interval]
             else:
                 ci = [np.nan, np.nan]
 
-            sd = sigma*np.sqrt(np.sum(np.power(vmat, 2)))
+            sd = _sigma * np.sqrt(np.sum(np.power(vmat, 2)))
             coef0 = np.dot(vmat, y)
             result.append((active[j],
                            _pval,
@@ -433,7 +446,7 @@ class GELMMnet(object):
         df = pd.DataFrame(index=active,
                       data=OrderedDict([(n, d) for n, d in zip(['variable',
                                                          'pval',
-                                                         'coef0',
+                                                         'coef',
                                                          'beta',
                                                          'Zscore',
                                                          'lower_confidence',

@@ -1,7 +1,6 @@
 import numpy as np
 from numba import jit
 
-from GELMMnet import GELMMnet
 from GELMMnet.utility.kernels import kinship
 
 
@@ -200,14 +199,13 @@ def _corr(y, ypred):
 
 
 # TODO: for some reason numba cannot infere the dtypes of the input
-def _parameter_search(args):
+@jit(nopython=True, cache=True)
+def _parameter_search(fold, l1, l2, delta, isIntercept, ytrain, ypred, Xtrain, Xpred, ytest, Xtest, P, eps, max_iter, n, m):
     """
     Function for grid search evaluation
 
     :return: error,l1,l2
     """
-    fold, l1, l2, delta, isIntercept, ytrain, ypred, Xtrain, Xpred, ytest, Xtest, P, eps, max_iter, n, m = args
-
     w = np.zeros(m)
     b = np.mean(ypred) if isIntercept else 0.0
 

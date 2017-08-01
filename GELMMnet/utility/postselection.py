@@ -3,6 +3,20 @@ import numpy as np
 from scipy.stats import norm
 
 
+def _min(vector):
+    try:
+        return min(vector)
+    except ValueError:
+        return np.inf
+
+
+def _max(vector):
+    try:
+        return max(vector)
+    except ValueError:
+        return -np.inf
+
+
 def _calc_pval(y, A, b, v, sigma):
     """
     calculates p-value based on defined polyhedral
@@ -15,9 +29,8 @@ def _calc_pval(y, A, b, v, sigma):
 
     rho = np.dot(A, v) / vv
     vec = (b - np.dot(A, y) + rho * z) / rho
-
-    vlo = np.max(vec[rho > 0])
-    vup = np.min(vec[rho < 0])
+    vlo = _max(vec[rho > 0])
+    vup = _min(vec[rho < 0])
 
     # calc p-value directly
     return _truncatednorm_surv(z, 0, vlo, vup, sd), vlo, vup
@@ -75,8 +88,9 @@ def _calc_interval(y, A, b, v, sigma, alpha, gridrange=[-100, 100], gridpts=100,
 
     rho = np.dot(A, v) / vv
     vec = (b - np.dot(A, y) + rho * z) / rho
-    vlo = np.max(vec[rho > 0])
-    vup = np.min(vec[rho < 0])
+
+    vlo = _max(vec[rho > 0])
+    vup = _min(vec[rho < 0])
 
     xg = np.linspace(gridrange[0]*sd, gridrange[1]*sd, num=gridpts)
 
@@ -123,7 +137,7 @@ def _grid_search(grid, fun, val1, val2, gridpts=100, griddepth=1):
 
 def _grid_bsearch(l, r, fun, val, gridpts=100, griddepth=0, below=True):
     """
-    Second level grid search for CI calculation
+    Second level grid binsearch for CI calculation
 
     """
     left = l

@@ -1,8 +1,11 @@
 import numpy as np
 from numba import jit
 
+from GELMMnet import GELMMnet
+from GELMMnet.utility.kernels import kinship
 
-@jit(nopython=True)
+
+@jit(nopython=True, cache=True)
 def _eval_neg_log_likelihood(ldelta, Uy, S):
     """
     Evaluate the negative log likelihood of a random effects model:
@@ -32,7 +35,7 @@ def _eval_neg_log_likelihood(ldelta, Uy, S):
     return nLL
 
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def _calc_glnet_obj(S, y, Pw, w, l1, l2, n, m):
     """
     Calculates the gelnet objective
@@ -48,7 +51,7 @@ def _calc_glnet_obj(S, y, Pw, w, l1, l2, n, m):
     return loss / (2.0 * n) + l1 * reg_l1 + 0.5 * l2 * reg_l2
 
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def _snap_threshold(residual, gamma):
     """
     soft-thresholding function to accelerate lasso regression
@@ -65,7 +68,7 @@ def _snap_threshold(residual, gamma):
         return residual - gamma
 
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def _update_wj(X, y, P, w, l1, l2, S, Pw, n, m, j):
     """
     Update rule based on coordinate descent
@@ -87,7 +90,7 @@ def _update_wj(X, y, P, w, l1, l2, S, Pw, n, m, j):
     return numerator / denom
 
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def _optimize_gelnet(y, X, P, l1, l2, S, Pw, n, m, max_iter, eps, w, b, with_intercept):
     """
     Coordinate descent of a generalized elastic net
@@ -134,7 +137,7 @@ def _optimize_gelnet(y, X, P, l1, l2, S, Pw, n, m, max_iter, eps, w, b, with_int
     return w, b
 
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def _predict(X, y, X_tilde, w, b, delta):
     """
     predicts the phenotype based on the trained model
@@ -150,7 +153,7 @@ def _predict(X, y, X_tilde, w, b, delta):
     Xtmp = np.concatenate((X, X_tilde), axis=0)
 
     # calculate Covariance matrices
-    K = 1. / Xtmp.shape[0] * np.dot(Xtmp, Xtmp.T)
+    K = kinship(Xtmp)
     idx_tt = np.arange(n_train)
     idx_vt = np.arange(n_train, n_test + n_train)
 
@@ -158,53 +161,77 @@ def _predict(X, y, X_tilde, w, b, delta):
     K_vt = K[idx_vt][:, idx_tt]
 
     if idx.shape[0] == 0:
-        return np.dot(K_vt, np.linalg.solve(K_tt + delta * np.eye(n_train), y))
+        return np.dot(K_vt, np.linalg.solve(K_tt + delta * np.eye(n_train), y[:, 0]))
 
     return np.dot(X_tilde[:, idx], w[idx]) + b + np.dot(K_vt, np.linalg.solve(K_tt + delta * np.eye(n_train),
                                                                              y[:, 0] - np.dot(X[:, idx],
                                                                                             w[idx]) + b))
 
 
-@jit(nonpython=True)
 def max_l1(y, X):
     """
     returns the upper limit of l1 (i.e., smallest value that yields a model with all zero weights)
 
     """
     b = np.mean(y)
-    xy = np.mean(np.dot(X.T, (y - b)), axis=1)
+    xy = np.mean(X * (y - b), axis=0)
     return np.max(np.fabs(xy))
 
 
-@jit(nonpython=True)
-def _mse(y, ypred):
+@jit(nopython=True, cache=True)
+def _rmse(y, ypred):
     """
-    Calculates the mean squared error
+    Calculates the root mean squared error
 
-    :return: MSE
+    :return: RMSE
     """
-    return np.nanmean(np.power((y - ypred), 2))
+    return np.sqrt(np.nanmean(np.power((y - ypred), 2)))
 
 
-@jit(nonpython=True)
-def _parameter_search(fold, alpha, ratio, w, b, delta, isIntercept, ytrain, Xtrain, ytest, Xtest, P, eps, max_iter):
+@jit(nopython=True, cache=True)
+def _corr(y, ypred):
+    """
+    Calculates the  negative pearson correlation coefficiant
+    :param y:
+    :param ypred:
+    :return:
+    """
+    return 1./len(y) * ((ypred-ypred.mean())*(y-y.mean())).sum()/(ypred.std()*y.std())
+
+
+# TODO: for some reason numba cannot infere the dtypes of the input
+def _parameter_search(args):
     """
     Function for grid search evaluation
 
     :return: error,l1,l2
     """
+    fold, l1, l2, delta, isIntercept, ytrain, ypred, Xtrain, Xpred, ytest, Xtest, P, eps, max_iter, n, m = args
 
-    n,m = Xtrain.shape
+    w = np.zeros(m)
+    b = np.mean(ypred) if isIntercept else 0.0
 
     # initial parameter estimates
     S = np.dot(Xtrain, w) + b
     Pw = np.dot(P, w)
 
-    l1 = ratio * alpha
-    l2 = alpha * (1. - ratio)
-
     w, b = _optimize_gelnet(ytrain, Xtrain, P, l1, l2, S, Pw, n, m, max_iter, eps, w, b, isIntercept)
 
-    ypred = _predict(Xtrain, ytrain, Xtest, w, b, delta)
+    # fehler ist hier. Xtrain sollte nicht die rotierte matrix sein...
+    yhat = _predict(Xpred, ypred, Xtest, w, b, delta)
+    return fold, -1.0 * _rmse(ytest[:, 0], yhat), l1, l2
 
-    return fold, _mse(ytest, ypred), l1, l2
+
+# TODO: for some reason numba cannot infere the dtypes of the input
+def _parameter_search_tmp(args):
+    """
+    Function for grid search evaluation
+
+    :return: error,l1,l2
+    """
+    fold, l1, l2, delta, isIntercept, ytrain, ypred, Xtrain, Xpred, ytest, Xtest, P, eps, max_iter, n, m = args
+    g = GELMMnet(ypred, Xpred, K=kinship(Xpred))
+    g.fit(P, l1=l1, l2=l2)
+    yhat = g.predict(Xtest)
+
+    return fold, _corr(ytest[:,0], yhat), l1, l2

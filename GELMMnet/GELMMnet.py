@@ -36,7 +36,9 @@ import scipy as sp
 from sklearn.model_selection import KFold
 from sklearn.preprocessing import scale
 
-from GELMMnet.utility.inference import max_l1, _eval_neg_log_likelihood, _optimize_gelnet, _predict, _parameter_search
+from GELMMnet.utility.inference import max_l1, _eval_neg_log_likelihood, _optimize_gelnet, _predict, _parameter_search, \
+    _rmse, _corr
+from GELMMnet.utility.kernels import kinship
 from GELMMnet.utility.postselection import _calc_interval, _calc_pval
 
 
@@ -54,7 +56,7 @@ class GELMMnet(object):
 
     """
 
-    def __init__(self, y, X, K=None, intercept=True, standardize=True):
+    def __init__(self, y, X, K=None, intercept=True):
 
         # first check for correct input
         assert X.shape[0] == y.shape[0], ValueError('dimensions do not match X({}), y({})'.format(X.shape[0]),y.shape[0])
@@ -70,66 +72,40 @@ class GELMMnet(object):
                 assert K.shape[0] == K.shape[1], ValueError('dimensions do not match')
                 assert K.shape[0] == X.shape[0], ValueError('dimensions do not match')
 
-        # instead of fitting a intercept we will  standardize the data
-        if standardize or intercept:
-            y = scale(y, with_std=False)
-            X = scale(X, with_std=False)
-
         self.__keep = keep
         self.__n, self.__m = X.shape
 
         if y.ndim == 1:
             y = sp.reshape(y, (self.__n, 1))
 
-        self.__isStandardized = standardize
         self.__islmm = K is not None
-        self.__isIntercept = intercept or standardize
+        self.__isIntercept = intercept
 
-        self.__y = y
-        self.__X = X
-        self.__K = K
-        self.__P = None
+        self.y = y
+        self.X = X
+        self.K = K
+        self.P = None
 
-        self.__SUX = None
-        self.__SUy = None
+        self.SUX = None
+        self.SUy = None
 
-        self.__w = np.zeros(self.__m)
-        self.__b = np.mean(y) if not self.__isIntercept else 0
-        self.__sigma = np.mean(y)
-        self.__ldelta = 0
+        self.w = np.zeros(self.__m)
+        self.b = np.mean(y) if self.__isIntercept else 0.0
+        self.sigma = np.mean(y)
+        self.ldelta = 0
 
-        self.__l1 = 1.0
-        self.__l2 = 1.0
+        self.l1 = 1.0
+        self.l2 = 1.0
 
-        self.__summary = None
-
-    @property
-    def summary(self):
-        return self.__summary
-
-    @property
-    def w(self):
-        return self.__w
-
-    @property
-    def b(self):
-        return self.__b
-
-    @property
-    def ldelta(self):
-        return self.__ldelta
-
-    @property
-    def sigma(self):
-        return self.__sigma
+        self.summary = None
 
     @property
     def Xtilde(self):
-        return self.__SUX
+        return self.SUX
 
     @property
     def ytilde(self):
-        return self.__SUy
+        return self.SUy
 
     def fit_null_model(self, numintervals=100, ldeltamin=-20, ldeltamax=20, debug=False):
         """
@@ -138,15 +114,15 @@ class GELMMnet(object):
 
         """
         n = self.__n
-        S, U = sp.linalg.eigh(self.__K)
+        S, U = sp.linalg.eigh(self.K)
 
         if debug:
             print("Optimizing")
             print("U:", U)
             print("U.T", U.T)
-            print("y", self.__y)
+            print("y", self.y)
 
-        Uy = sp.dot(U.T, self.__y)
+        Uy = sp.dot(U.T, self.y)
         nllgrid = sp.ones(numintervals + 1) * np.inf
         ldeltagrid = sp.arange(numintervals + 1) / (numintervals * 1.0) * (ldeltamax - ldeltamin) + ldeltamin
         nllmin = sp.inf
@@ -177,14 +153,14 @@ class GELMMnet(object):
                     ldeltaopt_glob = ldeltaopt
 
         # train lasso on residuals
-        self.__ldelta = ldeltaopt_glob
+        self.ldelta = ldeltaopt_glob
         delta0 = sp.exp(ldeltaopt_glob)
         Sdi = 1. / (S + delta0)
         Sdi_sqrt = sp.sqrt(Sdi)
-        SUX = sp.dot(U.T, self.__X)
-        self.__SUX = SUX * sp.tile(Sdi_sqrt, (self.__m, 1)).T
-        SUy = sp.dot(U.T, self.__y)
-        self.__SUy = SUy * sp.reshape(Sdi_sqrt, (n, 1))
+        SUX = sp.dot(U.T, self.X)
+        self.SUX = SUX * sp.tile(Sdi_sqrt, (self.__m, 1)).T
+        SUy = sp.dot(U.T, self.y)
+        self.SUy = SUy * sp.reshape(Sdi_sqrt, (n, 1))
 
         if debug:
             print("delta0", delta0)
@@ -192,23 +168,28 @@ class GELMMnet(object):
             print("SUX", SUX)
             print("SUy", SUy)
 
-    def fit(self, P, l1=1.0, l2=1.0, eps=1e-5, max_iter=1000):
+    def fit(self, P, l1=None, l2=None, eps=1e-8, max_iter=1000):
         """
             Train complete model
         """
 
-        self.__l2 = l2
-        self.__P = P
-        self.__l1 = l1
+        if l1 is not None:
+            self.l1 = l1
+        if l2 is not None:
+            self.l2 = l2
 
-        if self.__SUX is None and self.__islmm:
+        self.P = P
+
+        if self.SUX is None and self.__islmm:
             self.fit_null_model()
 
-        X = self.__SUX if self.__islmm else self.__X
-        y = self.__SUy if self.__islmm else self.__y
+        X = self.SUX if self.__islmm else self.X
+        y = self.SUy if self.__islmm else self.y
         n, m = X.shape
-        w = self.__w
-        b = self.__b
+        w = self.w
+        b = self.b
+        l1 = self.l1
+        l2 = self.l2
 
         assert P.shape[0] == m, ValueError("P's dimensions do not match")
 
@@ -218,70 +199,98 @@ class GELMMnet(object):
 
         w, b = _optimize_gelnet(y, X, P, l1, l2, S, Pw, n, m, max_iter, eps, w, b, self.__isIntercept)
 
-        self.__w = w
-        self.__b = b
+        self.w = w
+        self.b = b
         return b, w
 
-    def kfoldFit(self, P, nfold=10, alpha_nof=100, ratio_nof=100, eps=1e-5, max_iter=10000, cpu=1, debug=False):
+    def kfoldFit(self, P, nfold=5, l1_nof=10, l2_nof=10, eps=1e-8, max_iter=10000, cpu=1, debug=False):
         """
         optimizes l1 and l2 based on k-fold cv with grid search minimizing the MSE
 
         """
 
         def generate_grid():
-            for i, (train_id, test_id) in enumerate(cv.split(X)):
-                Xtrain, Xtest = X[train_id], X[test_id]
-                ytrain, ytest = y[train_id], y[test_id]
+            for i, (train_id, test_id) in enumerate(cv.split(Xt)):
+                Xtrain, Xtest, Xpred = Xt[train_id], Xv[test_id], Xv[train_id]
+                ytrain, ytest, ypred = y[train_id], yv[test_id], yv[train_id]
+                n,m = Xtrain.shape
+                for l1 in l1s:
+                    for l2 in l2s:
+                        yield [i, l1, l2, delta, self.__isIntercept,
+                               ytrain, ypred, Xtrain, Xpred, ytest, Xtest, P, eps, max_iter, n, m]
 
-                for a in alphas:
-                    for r in ratios:
-                        yield i, a, r, w, b, delta, self.__isIntercept, ytrain, Xtrain, ytest, Xtest, P, eps, max_iter
+        self.P = P
 
-        self.__P = P
-        if self.__SUX is None and self.__islmm:
+        if debug and self.__islmm:
+            print("Correcting for population structure")
+
+        if self.SUX is None and self.__islmm:
             self.fit_null_model()
 
         pool = Pool(nodes=cpu)
         cv = KFold(n_splits=nfold)
 
-        X = self.__SUX if self.__islmm else self.__X
-        y = self.__SUy if self.__islmm else self.__y
-        n, m = X.shape
-        w = self.__w
-        b = self.__b
-        delta = np.exp(self.__ldelta)
+        Xt = self.SUX if self.__islmm else self.X
+        Xv = self.X
+        y = self.SUy if self.__islmm else self.y
+        yv = self.y
+        w = self.w
+        b = self.b
+        delta = np.exp(self.ldelta)
 
-        alpha_ceil = max_l1(y, X)
-        ratios = np.linspace(0.0, 1., num=ratio_nof) # that should actually be skewed towards 1.
-        alphas = np.linspace(0.0, alpha_ceil, num=alpha_nof, endpoint=False)
+        alpha_ceil = max_l1(y, Xt)
+        if debug:
+            print("Max l1:", alpha_ceil)
+            S = sp.dot(Xt, w) + b
+            Pw = sp.dot(P, w)
+            n,m = Xt.shape
+            w, b = _optimize_gelnet(y, Xt, P, alpha_ceil, 0, S, Pw, n, m, max_iter, eps, w, b, self.__isIntercept)
+            print("w != 0:", np.where(np.fabs(w) > 1e-5 / np.sqrt(np.sum(np.power(Xt, 2), axis=0)))[0])
 
-        grid_result = pool.map(_parameter_search, generate_grid())
+        n = max(1, int(l2_nof / 2))
+        l2s = [10**x for x in range(-n, n)]+[0]
+        l1s = np.linspace(0.0, alpha_ceil, num=l1_nof, endpoint=False)
+
+        if debug:
+            print("L2:", l2s)
+            print("L1:", l1s)
+
+        grid_result = map(_parameter_search, generate_grid())
 
         # summarize grid search results
         sum_res = {}
+
         for fold, error, l1, l2 in grid_result:
             sum_res.setdefault((l1, l2), []).append(error)
 
+        for k,v in sum_res.items():
+            print(k, np.mean(v))
+
         # find best l1, l2 pair across the folds
-        (l1, l2), error = min(sum_res.items(), key=lambda x: np.mean(x[1]))
+        (l1, l2), error = max(sum_res.items(), key=lambda x: np.mean(x[1]))
+
         if debug:
             print("Best Parameters:", l1, l2, "With error:", np.mean(error))
 
         # fitting on whole date with best parameter pair
-        S = sp.dot(X, w) + b
-        Pw = sp.dot(P, w)
+        S = np.dot(Xt, w) + b
+        Pw = np.dot(P, w)
+        w, b = _optimize_gelnet(y, Xt, P, l1, l2, S, Pw, n, m, max_iter, eps, w, b, self.__isIntercept)
+        yhat = _predict(Xv, yv, Xv, w, b, delta)
 
-        w, b = _optimize_gelnet(y, X, P, l1, l2, S, Pw, n, m, max_iter, eps, w, b, self.__isIntercept)
+        self.w = w
+        self.b = b
+        self.l1 = l1
+        self.l2 = l2
 
-        self.__w = w
-        self.__b = b
+        if debug:
+            print("Training Correlation:", _corr(yv[:, 0], yhat)," Training Error:", _rmse(yv[:, 0], yhat))
 
-        # estimate error
-        ypred = self.predict(X)
         df = np.sum(w != 0) - 1
-        sigma = np.sqrt(np.sum(np.power(y - ypred, 2)))/(len(y) - df)
-        self.__sigma = sigma
-
+        sigma = np.sqrt(np.sum(np.power(yv[:, 0] - yhat, 2)))/(len(y) - df)
+        self.sigma = sigma
+        if debug:
+            print("sigma:", sigma)
         return l1, l2, sigma
 
     def predict(self, X_tilde):
@@ -296,13 +305,15 @@ class GELMMnet(object):
 
         assert X_tilde.shape[1] == self.__m, ValueError("Dimension of input data does not match")
 
-        w = self.__w
-        b = self.__b
-        y = self.__y
-        X = self.__X
-        delta = np.exp(self.__ldelta)
+        w = self.w
+        b = self.b
+        y = self.y
+        X = self.X
+        #if self.__isStandardized:
+        #    X_tilde = scale(X_tilde, with_std=False)
 
-        # calculate kniship matrix for the new data point
+        delta = np.exp(self.ldelta)
+
         return _predict(X, y, X_tilde, w, b, delta)
 
     def post_selection_analysis(self, alpha=0.1, compute_intervals=False, gridrange=[-100, 100], tol_beta=1e-5,
@@ -324,16 +335,20 @@ class GELMMnet(object):
         'variable', 'pval', 'lasso', 'beta','Zscore', 'lower_ci', 'upper_ci', 'lower_trunc', 'upper_trunc', 'sd'.
 
         """
-        if self.__SUX is None and self.__islmm:
+        if self.SUX is None and self.__islmm:
             RuntimeError("The model has not been trained yet")
 
-        X = self.__SUX if self.__islmm else self.__X
-        y = self.__SUy[:, 0] if self.__islmm else self.__y[:,0]
-        w = self.__w
-        P = self.__P
-        l2 = self.__l2
-        l1 = self.__l1
-        sigma = self.__sigma if self.__sigma is not None else np.std(y)
+        X = self.SUX if self.__islmm else self.X
+        y = self.SUy[:, 0] if self.__islmm else self.y[:, 0]
+        w = self.w
+        P = self.P
+        l2 = self.l2
+        l1 = self.l1
+        sigma = self.sigma if self.sigma is not None else np.std(y)
+
+        if self.__isIntercept:
+            y = scale(y, with_std=False)
+            X = scale(X, with_std=False)
 
         # compute the hessian of the active set M
         # H(M) = (XT_M*X_M + l2*P)^-1
@@ -427,7 +442,7 @@ class GELMMnet(object):
                                                          'upper_trunc',
                                                          'sd'],
                                                         np.array(result).T)])).set_index('variable')
-        self.__summary = df
+        self.summary = df
         return df
 
 

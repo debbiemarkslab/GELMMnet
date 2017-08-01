@@ -220,18 +220,3 @@ def _parameter_search(args):
     # fehler ist hier. Xtrain sollte nicht die rotierte matrix sein...
     yhat = _predict(Xpred, ypred, Xtest, w, b, delta)
     return fold, -1.0 * _rmse(ytest[:, 0], yhat), l1, l2
-
-
-# TODO: for some reason numba cannot infere the dtypes of the input
-def _parameter_search_tmp(args):
-    """
-    Function for grid search evaluation
-
-    :return: error,l1,l2
-    """
-    fold, l1, l2, delta, isIntercept, ytrain, ypred, Xtrain, Xpred, ytest, Xtest, P, eps, max_iter, n, m = args
-    g = GELMMnet(ypred, Xpred, K=kinship(Xpred))
-    g.fit(P, l1=l1, l2=l2)
-    yhat = g.predict(Xtest)
-
-    return fold, _corr(ytest[:,0], yhat), l1, l2

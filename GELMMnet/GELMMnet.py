@@ -33,13 +33,15 @@ import numpy as np
 import pandas as pd
 import scipy as sp
 
+np.seterr(all="ignore")
+
 from sklearn.model_selection import KFold
 from sklearn.preprocessing import scale
 
 from GELMMnet.utility.inference import max_l1, _eval_neg_log_likelihood, _optimize_gelnet, _predict, _parameter_search, \
     _rmse, _corr
 from GELMMnet.utility.kernels import kinship
-from GELMMnet.utility.postselection import _calc_interval, _calc_pval
+from GELMMnet.utility.postselection import _calc_interval, _calc_pval, _tg_limits, _tg_pval, _tg_interval
 
 
 class GELMMnet(object):
@@ -343,6 +345,7 @@ class GELMMnet(object):
             RuntimeError("The model has not been trained yet")
 
         X = self.X
+        n,m = X.shape
         y = self.y[:, 0]
         w = self.w
         P = self.P
@@ -419,12 +422,14 @@ class GELMMnet(object):
             vj = sign * vj
 
             #calculate p-value
-            _pval, vlo, vup = _calc_pval(y, A, b, vj, _sigma)
+            #_pval, vlo, vup = _calc_pval(y, A, b, vj, _sigma)
+            vlo, vup, sd, estimate = _tg_limits(y, A, b, vj, np.diag(np.ones(n)*np.power(_sigma, 2)))
+            _pval = _tg_pval(estimate, vlo, vup, sd)
             vmat = vj * mj * sign
 
             if compute_intervals:
-                _interval, tailarea = _calc_interval(y, A, b, vj, _sigma, alpha,
-                                                     gridrange=gridrange, flip=sign == -1)
+                _interval, tailarea = _tg_interval(estimate, vlo, vup, sd, alpha,
+                                                   gridrange=gridrange, flip=sign == -1)
 
                 ci = [x*mj for x in _interval]
             else:
@@ -457,6 +462,5 @@ class GELMMnet(object):
                                                         np.array(result).T)])).set_index('variable')
         self.summary = df
         return df
-
 
 

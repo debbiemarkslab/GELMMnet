@@ -17,25 +17,6 @@ def _max(vector):
         return -np.inf
 
 
-def _calc_pval(y, A, b, v, sigma):
-    """
-    calculates p-value based on defined polyhedral
-
-    :return: p-value
-    """
-    z = np.sum(v*y)
-    vv = np.sum(np.power(v, 2))
-    sd = sigma * np.sqrt(vv)
-
-    rho = np.dot(A, v) / vv
-    vec = (b - np.dot(A, y) + rho * z) / rho
-    vlo = _max(vec[rho > 0])
-    vup = _min(vec[rho < 0])
-
-    # calc p-value directly
-    return _truncatednorm_surv(z, 0, vlo, vup, sd), vlo, vup
-
-
 def _truncatednorm_surv(z, mean, a, b, sd):
     """
     Truncated normal survival function
@@ -74,33 +55,6 @@ def _truncatednorm_surv(z, mean, a, b, sd):
             return np.NaN
         p = min(1.0, max(0.0, p))
     return p
-
-
-def _calc_interval(y, A, b, v, sigma, alpha, gridrange=[-100, 100], gridpts=100, griddepth=1, flip=False):
-    """
-    Selection corrected CI calculation
-
-    :return: (CI_lower,CI_upper),(tail_lower, tail_upper)
-    """
-    z = np.sum(v*y)
-    vv = np.sum(np.power(v, 2))
-    sd = sigma * np.sqrt(vv)
-
-    rho = np.dot(A, v) / vv
-    vec = (b - np.dot(A, y) + rho * z) / rho
-
-    vlo = _max(vec[rho > 0])
-    vup = _min(vec[rho < 0])
-
-    xg = np.linspace(gridrange[0]*sd, gridrange[1]*sd, num=gridpts)
-
-    fun = functools.partial(lambda z, vlo, vup, sd, x: _truncatednorm_surv(z, x, vlo, vup, sd), z, vlo, vup, sd)
-    int = _grid_search(xg, fun, alpha/2., 1 - alpha/2., gridpts, griddepth)
-    tailarea = [fun(int[0]), 1 - fun(int[1])]
-
-    if flip:
-        return [-x for x in int[::-1]], tailarea[::-1]
-    return int, tailarea
 
 
 def _grid_search(grid, fun, val1, val2, gridpts=100, griddepth=1):
@@ -176,3 +130,54 @@ def _grid_bsearch(l, r, fun, val, gridpts=100, griddepth=0, below=True):
         depth += 1
 
     return left if below else right
+
+
+def _tg_limits(Z, A, b, eta, Sigma):
+    """
+    Compute the truncation interval and SD of the corresponding Gaussian
+
+    :return: lower-bound, upper-bound, sd, estimate
+    """
+    target_estimate = np.sum(eta * Z)
+
+    n = len(Z)
+    eta_col = np.reshape(eta, (1, n))
+    eta_row = np.reshape(eta, (n, 1))
+    b = np.reshape(b, (len(b), 1))
+    var_estimate = np.sum(np.dot(eta_col, np.dot(Sigma, eta_row)))
+    cross_cov = np.dot(Sigma, eta_row)
+    resid = np.dot(np.identity(n) - np.dot(np.reshape(cross_cov / var_estimate, (n, 1)), eta_col), Z)
+    rho = np.dot(A, cross_cov / var_estimate)
+    vec = (b - np.dot(A, np.reshape(resid, (len(resid),1)))) / rho
+    vlo = _max(vec[rho > 0])
+    vup = _min(vec[rho < 0])
+
+    sd = np.sqrt(var_estimate)
+
+    return vlo, vup, sd, target_estimate
+
+
+def _tg_pval(estimate, vlo, vup, sd, null_value=0):
+    """
+    calculates p-value based on defined polyhedral
+
+    :return: p-value
+    """
+    return _truncatednorm_surv(estimate, null_value, vlo, vup, sd)
+
+
+def _tg_interval(estimate, vlo, vup, sd, alpha, gridrange=[-100, 100], gridpts=100, griddepth=1, flip=False):
+    """
+    Selection corrected CI calculation
+
+    :return: (CI_lower,CI_upper),(tail_lower, tail_upper)
+    """
+    xg = np.linspace(gridrange[0]*sd, gridrange[1]*sd, num=gridpts)
+
+    fun = functools.partial(lambda z, vlo, vup, sd, x: _truncatednorm_surv(z, x, vlo, vup, sd), estimate, vlo, vup, sd)
+    int = _grid_search(xg, fun, alpha/2., 1 - alpha/2., gridpts, griddepth)
+    tailarea = [fun(int[0]), 1 - fun(int[1])]
+
+    if flip:
+        return [-x for x in int[::-1]], tailarea[::-1]
+    return int, tailarea

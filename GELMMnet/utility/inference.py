@@ -198,7 +198,6 @@ def _corr(y, ypred):
     return 1./len(y) * ((ypred-ypred.mean())*(y-y.mean())).sum()/(ypred.std()*y.std())
 
 
-# TODO: for some reason numba cannot infere the dtypes of the input
 @jit(nopython=True, cache=True)
 def _parameter_search(fold, l1, l2, delta, isIntercept, ytrain, ypred, Xtrain, Xpred, ytest, Xtest, P, eps, max_iter, n, m):
     """

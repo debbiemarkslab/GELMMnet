@@ -33,6 +33,8 @@ import numpy as np
 import pandas as pd
 import scipy as sp
 
+np.seterr(all="ignore")
+
 from sklearn.model_selection import KFold
 from sklearn.preprocessing import scale
 
